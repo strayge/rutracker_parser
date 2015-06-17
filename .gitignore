@@ -4,6 +4,7 @@ old/
 notes.py
 
 # Settings
+db.sqlite
 ids.txt
 proxy.txt
 login.txt
@@ -11,6 +12,7 @@ login.txt
 # Results
 finished.txt
 table.txt
+table.tar.bz2
 descr/
 html/
 log.txt
