@@ -93,9 +93,27 @@ class MainWindow(QMainWindow):
         self.model.setRowCount(len(items))
         for i in range(len(items)):
             for j in range(len(tree_columns)):
+                # text = ''
+                if j == tree_columns.index('size'):
+                    size = int(items[i][j])
+                    if size < 1024:
+                        text = '%.0f B' % (float(items[i][j]))
+                    elif size < 1024 * 1024:
+                        text = '%.0f KB' % (float(items[i][j]) / (1024))
+                    elif size < 1024 * 1024 * 1024:
+                        text = '%.0f MB' % (float(items[i][j]) / (1024 * 1024))
+                    else:
+                        text = '%.2f GB' % (float(items[i][j]) / (1024 * 1024 * 1024))
+                elif (j == tree_columns.index('seeds')) or (j == tree_columns.index('peers')) \
+                        or (j == tree_columns.index('id')) or (j == tree_columns.index('downloads')):
+                    text = int(items[i][j])
+                else:
+                    text = str(items[i][j])
                 item = QStandardItem()
-                item.setData(QVariant(items[i][j]), Qt.DisplayRole)
+                item.setData(QVariant(text), Qt.DisplayRole)
+                # item.setData(QVariant(items[i][j]), Qt.DisplayRole)
                 self.model.setItem(i, j, item)
+
         self.tree.sortByColumn(tree_columns.index('seeds'), Qt.DescendingOrder)
         self.tree.resizeColumnsToContents()
         if self.tree.columnWidth(tree_columns.index('name')) > 500:
