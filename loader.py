@@ -129,6 +129,17 @@ def parse_rutracker(id, html):
             # date = between(text, 'зарегистрирован">[ ', ' ]<')
             date = fix_date(date)
             line.append(date)
+
+            category_htmlpart = between(text, '<td class="nav w100"', '</td>')
+            category_temp = category_htmlpart.replace('">', "</a>").split('</a>')
+            category_list = list((i for i in category_temp if ('<em>' not in i) and ('\t' not in i) and ('style="' not in i) and ('Список форумов ' not in i)))
+            category_string = ''
+            for one_category in category_list:
+                category_string += one_category + ' | '
+            category_string = category_string[:-3]
+            # print(category_string)
+            line.append(category_string)
+
             line = '\t'.join(line)
             descr = between(text, '<div class="post_body" id="', '<div class="clear"></div>')
             descr = descr.split('>', 1)[1]
@@ -138,19 +149,12 @@ def parse_rutracker(id, html):
             descr = unescape(descr)
             return id, line, descr
 
-    # try:
-    text = html  # .decode('cp1251').encode('utf8')
+    text = html
     if '<a href="profile.php?mode=register">' in text:
         raise SomeError('no login', fatal=False)
-        # return id, 'ERROR', 'NO LOGIN'
     if len(text) < 1000:
         raise SomeError('too short', fatal=False)
-        # return id, 'ERROR', 'TOO SHORT'
     return do_with(id, text)
-    # except UnicodeDecodeError:
-    #     print(id, 'ERROR', "UnicodeDecodeError")
-    #     text = html.decode('cp1251').encode('cp1251')
-    #     return do_with(id, text)
 
 
 def process_rutracker_page(id, headers):
