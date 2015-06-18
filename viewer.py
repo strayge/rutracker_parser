@@ -1,3 +1,6 @@
+#!/usr/bin/python3
+# -*- coding: utf8 -*-
+
 import sys
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
@@ -9,6 +12,7 @@ import urllib.parse
 from tarfile import TarFile
 
 tree_columns = ('id', 'name', 'size', 'seeds', 'peers', 'hash', 'downloads', 'date')
+tree_columns_visible = ('ID', 'Название', 'Размер', 'Сиды', 'Пиры', 'Hash', 'Скачиваний', 'Дата')
 
 
 class NumberSortModel(QSortFilterProxyModel):
@@ -36,13 +40,15 @@ class MainWindow(QMainWindow):
         self.tree = QTableView()
         self.webview = QtWebKitWidgets.QWebView()
         separator = QSplitter()
+        self.statusbar = QStatusBar()
+        self.setStatusBar(self.statusbar)
 
         self.model = QStandardItemModel()
         proxy = NumberSortModel()
         proxy.setSourceModel(self.model)
         self.tree.setModel(self.model)
         self.model.setColumnCount(len(tree_columns))
-        self.model.setHorizontalHeaderLabels(tree_columns)
+        self.model.setHorizontalHeaderLabels(tree_columns_visible)
         self.tree.verticalHeader().setVisible(False)
         self.tree.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.tree.setSelectionMode(QAbstractItemView.SingleSelection)
@@ -50,8 +56,11 @@ class MainWindow(QMainWindow):
         self.tree.verticalHeader().setDefaultSectionSize(24)
         self.webview.setUrl(QUrl("about:blank"))
         self.webview.setZoomFactor(0.85)
-        self.search.setText('Search')
+        self.search.setText('Искать')
         self.input2.setMaximumWidth(300)
+        self.setWindowTitle('RuTracker database   |   by Str@y')
+        self.input.setPlaceholderText('Строка для поиска в названии')
+        self.input2.setPlaceholderText('Строка для поиска в категории')
 
         self.grid.addWidget(self.input, 0, 0)
         self.grid.addWidget(self.input2, 0, 1)
@@ -86,10 +95,11 @@ class MainWindow(QMainWindow):
         sql = sql[:-3]
         if category != '':
             sql += " AND (category LIKE '%" + category + "%') "
-        sql += "ORDER BY seeds LIMIT 100"
+        sql += "ORDER BY seeds LIMIT 1000"
         print(sql)  # DEBUG
         items = self.c.execute(sql).fetchall()
 
+        self.statusbar.showMessage('Найдено %i записей' % len(items))
         self.model.setRowCount(len(items))
         for i in range(len(items)):
             for j in range(len(tree_columns)):
