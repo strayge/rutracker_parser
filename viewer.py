@@ -83,7 +83,7 @@ class MainWindow(QMainWindow):
 
     def do_search(self):
         print('search')
-        text = self.input.text()
+        text = self.input.text().replace("'", "''")
         category = self.input2.text()
         words = text.split(' ')
         sql = "SELECT * FROM table1 WHERE "
@@ -202,7 +202,7 @@ class MainWindow(QMainWindow):
 
             for line in f.splitlines():
                 id, name, size, seeds, peers, hash, downloads, date = line.strip().split(sep='\t')
-                name = str.replace(name, '\'', '?')
+                name = str.replace(name, "'", "''")
                 sql = '''INSERT INTO table1 VALUES (%s, '%s', %s, %s, %s, '%s', %s, '%s')''' % (
                     id, name, size, seeds, peers, hash, downloads, date)
                 self.c.execute(sql)
