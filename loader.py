@@ -47,7 +47,7 @@ def get_rutracker_cookie(login, password):
         'login_password': password,
         'login': b'\xc2\xf5\xee\xe4'  # '%C2%F5%EE%E4'
     }
-    time.sleep(random.randrange(10, 20))  # DEBUG
+    # time.sleep(random.randrange(2, 5))  # DEBUG
     r = requests.post('http://login.rutracker.org/forum/login.php', data=post_params)
     if 'bb_data' in r.cookies.keys():
         cookie = 'bb_data=' + r.cookies['bb_data'] + '; tr_simple=1; spylog_test=1'
@@ -150,7 +150,7 @@ def parse_rutracker(id, html):
             return id, line, descr
 
     text = html
-    if '<a href="profile.php?mode=register">' in text:
+    if 'profile.php?mode=register">' in text:
         raise SomeError('no login', fatal=False)
     if len(text) < 1000:
         raise SomeError('too short', fatal=False)
@@ -169,7 +169,7 @@ def process_rutracker_page(id, headers):
     return parse_rutracker(id, html)
 
 
-def worker(input, output, login, password, proxy, options):
+def worker(input, output, cookie, proxy, options):
     if options.noproxy:
         print('no using proxy')
     else:
@@ -177,20 +177,33 @@ def worker(input, output, login, password, proxy, options):
         socks.setdefaultproxy(socks.PROXY_TYPE_SOCKS5, "127.0.0.1", proxy)
         socket.socket = socks.socksocket
 
-    try:
-        cookie = get_rutracker_cookie(login, password)
-    except requests.exceptions.RequestException:
-        output.put((current_process().name, 'ERROR', 'RequestException in get_rutracker_cookie'))
-        exit()
-    except SomeError as e:
-        output.put((current_process().name, 'ERROR', e.value))
-        exit()
+    # try:
+    #     cookie = get_rutracker_cookie(login, password)
+    # except requests.exceptions.RequestException:
+    #     output.put((current_process().name, 'ERROR', 'RequestException in get_rutracker_cookie'))
+    #     exit()
+    # except SomeError as e:
+    #     output.put((current_process().name, 'ERROR', e.value))
+    #     exit()
+
+    useragents = ['Mozilla/5.0 (Android; Mobile; rv:38.0) Gecko/38.0 Firefox/38.0',
+                  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_3) AppleWebKit/600.6.3 (KHTML, like Gecko) Version/8.0.6 Safari/600.6.3',
+                  'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:38.0) Gecko/20100101 Firefox/38.0',
+                  'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:38.0) Gecko/20100101 Firefox/38.0',
+                  'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:38.0) Gecko/20100101 Firefox/38.0',
+                  'Mozilla/5.0 (Windows NT 6.3; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/43/0/2357/81 Safari/537.36',
+                  'Mozilla/5.0 (Windows NT 6.3; WOW64; rv:38.0) Gecko/20100101 Firefox/38.0',
+                  'Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; rv:11.0) like Gecko',
+                  'Mozilla/5.0 (X11; Ubunru; Linux x86_64; rv:38.0) Gecko/20100101 Firefox/38.0',
+                  'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/43.0.2357.124 Safari/537.36',
+                  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_5) AppleWebKit/600.6.3 (KHTML, like Gecko) Version/7.1.5 Safari/537.85.15'
+                  ]
 
     headers = {
         'Accept-Encoding': 'gzip,deflate,sdch',
         'Host': domain,
         'Accept-Language': 'ru,en-US;q=0.8,en;q=0.6',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:26.0) Gecko/20110101 Firefox/26.0',
+        'User-Agent': useragents[random.randrange(0, len(useragents))],
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Referer': 'http://%s/' % domain,
         'Cookie': cookie,
@@ -209,7 +222,7 @@ def worker(input, output, login, password, proxy, options):
             if e.fatal:
                 output.put(current_process().name, 'ERROR', 'Thread terminated.')
                 exit()
-        time.sleep(2)
+        time.sleep(3)
 
 
 if __name__ == '__main__':
@@ -266,11 +279,48 @@ if __name__ == '__main__':
         login_list = list({(LOGIN, PASSWORD)})
     random.shuffle(login_list)
 
-    processes = list()
-    for i in range(threads_num):
-        login, password = login_list[i % len(login_list)]
+    cookie_proxy_list = []
+
+    last_i = 0
+    for i in range(len(login_list)):
+        last_i = i
+        l, p = login_list[i]
         proxy = int(proxy_list[i % len(proxy_list)])
-        p = Process(target=worker, args=(task_queue, done_queue, login, password, proxy, options))
+        if options.noproxy:
+            # print('no using proxy')
+            pass
+        else:
+            # print(('using proxy, port ' + str(proxy)))
+            socks.setdefaultproxy(socks.PROXY_TYPE_SOCKS5, "127.0.0.1", proxy)
+            socket.socket = socks.socksocket
+
+        try:
+            cookie = get_rutracker_cookie(l, p)
+            cookie_proxy_list.append([cookie, proxy])
+            print('OK, proxy: ' + str(proxy) + ', login: ' + l)
+        except:
+            print('ERROR, proxy: ' + str(proxy) + ', login: ' + l)
+        time.sleep(0.7)
+
+        if len(cookie_proxy_list) >= threads_num:
+            print('stop cookies, break')
+            break
+        print('cookie_proxy_list length: ' + str(len(cookie_proxy_list)))
+
+    max_threads = min(len(cookie_proxy_list) * 2, threads_num)
+    print('max threads =', max_threads)
+    for j in range(max_threads - len(cookie_proxy_list)):
+        proxy = int(proxy_list[(last_i + j) % len(proxy_list)])
+        cookie_proxy_list.append([cookie_proxy_list[j][0], proxy])
+
+    print(cookie_proxy_list)
+    processes = list()
+    for i in range(len(cookie_proxy_list)):
+        login, password = login_list[i % len(login_list)]
+        cookie, proxy = cookie_proxy_list[i % len(cookie_proxy_list)]
+        # proxy = int(proxy_list[i % len(proxy_list)])
+        time.sleep(1)
+        p = Process(target=worker, args=(task_queue, done_queue, cookie, proxy, options))
         p.start()
         processes.append(p)
 
@@ -309,7 +359,7 @@ if __name__ == '__main__':
         id = int(id)
         task_queue.put(id)
 
-    for i in range(threads_num):
+    for i in range(len(cookie_proxy_list)):
         task_queue.put('STOP')
 
     handle_table_file = open(table_file, 'a', encoding='utf8')
