@@ -11,8 +11,8 @@ import os
 import urllib.parse
 from tarfile import TarFile
 
-tree_columns = ('id', 'name', 'size', 'seeds', 'peers', 'hash', 'downloads', 'date')
-tree_columns_visible = ('ID', 'Название', 'Размер', 'Сиды', 'Пиры', 'Hash', 'Скачиваний', 'Дата')
+tree_columns = ('id', 'name', 'size', 'seeds', 'peers', 'hash', 'downloads', 'date', 'category')
+tree_columns_visible = ('ID', 'Название', 'Размер', 'Сиды', 'Пиры', 'Hash', 'Скачиваний', 'Дата', 'Раздел')
 
 
 class NumberSortModel(QSortFilterProxyModel):
@@ -83,6 +83,7 @@ class MainWindow(QMainWindow):
 
     def do_search(self):
         print('search')
+        limit = 1000
         text = self.input.text().replace("'", "''")
         category = self.input2.text()
         words = text.split(' ')
@@ -90,12 +91,14 @@ class MainWindow(QMainWindow):
         for w in words:
             if (len(w) > 1) and (w[0]) == '-':
                 sql += " (name NOT LIKE '%" + w[1:] + "%') AND"
+            elif (len(w) > len('limit:')) and (w[:6] == 'limit:'):
+                limit = int(w[6:])
             else:
                 sql += " (name LIKE '%" + w + "%') AND"
         sql = sql[:-3]
         if category != '':
             sql += " AND (category LIKE '%" + category + "%') "
-        sql += "ORDER BY seeds LIMIT 1000"
+        sql += "ORDER BY seeds LIMIT %i" % limit
         print(sql)  # DEBUG
         items = self.c.execute(sql).fetchall()
 
@@ -151,10 +154,13 @@ class MainWindow(QMainWindow):
 
     def do_select(self, index=None):
         id = int(self.model.item(index.row(), tree_columns.index('id')).text())
-        archive = TarFile.open('descr/%03i/%05i.tar.bz2' % (id // 100000, id // 1000), 'r:bz2' )
-        s = archive.extractfile('%08i' % id).read().decode()
-        archive.close()
-        self.webview.setHtml(s)
+        try:
+            archive = TarFile.open('descr/%03i/%05i.tar.bz2' % (id // 100000, id // 1000), 'r:bz2' )
+            s = archive.extractfile('%08i' % id).read().decode()
+            archive.close()
+            self.webview.setHtml(s)
+        except FileNotFoundError:
+            self.webview.setHtml('Нет описания')
 
     def init_db(self):
         db_name = 'db.sqlite'
@@ -184,27 +190,31 @@ class MainWindow(QMainWindow):
 
         if not os.path.exists(db_name):
             print('db not exists')
-            self.conn = sqlite3.connect(db_name)
-            archive = TarFile.open('table.tar.bz2', 'r:bz2')
-            member = archive.getmember('table.txt')
-            chksum = member.chksum
-            size = member.size
-            f = archive.extractfile('table.txt').read().decode()
+            # self.conn = sqlite3.connect(db_name)
+            self.conn = sqlite3.connect(':memory:')
+            # archive = TarFile.open('table.tar.bz2', 'r:bz2')
+            # member = archive.getmember('table.txt')
+            # chksum = member.chksum
+            # size = member.size
+            # f = archive.extractfile('table.txt').read().decode()
+            f = open('table.txt', 'r', encoding='utf8')
+            # f = x.read()
 
             self.c = self.conn.cursor()
             self.c.execute(
-                'CREATE TABLE table1 (id INT, name TEXT, size INT, seeds INT, peers INT, hash TEXT, downloads INT, DATE DATE)')
+                'CREATE TABLE table1 (id INT, name TEXT, size INT, seeds INT, peers INT, hash TEXT, downloads INT, DATE DATE, category TEXT)')
             # self.c.execute('''CREATE VIRTUAL TABLE table1 USING fts4(tokenize=porter, id INT, name TEXT, size INT, seeds INT, peers INT, hash TEXT, downloads INT, DATE DATE)''')
 
             self.c.execute('CREATE TABLE main (name TEXT, value TEXT)')
-            self.c.execute('INSERT INTO main VALUES(\'chksum\', \'' + str(chksum) + '\')')
-            self.c.execute('INSERT INTO main VALUES(\'size\', \'' + str(size) + '\')')
+            # self.c.execute('INSERT INTO main VALUES(\'chksum\', \'' + str(chksum) + '\')')
+            # self.c.execute('INSERT INTO main VALUES(\'size\', \'' + str(size) + '\')')
 
-            for line in f.splitlines():
-                id, name, size, seeds, peers, hash, downloads, date = line.strip().split(sep='\t')
+            # for line in f.splitlines():
+            for line in f:
+                id, name, size, seeds, peers, hash, downloads, date, category = line.strip().split(sep='\t')
                 name = str.replace(name, "'", "''")
-                sql = '''INSERT INTO table1 VALUES (%s, '%s', %s, %s, %s, '%s', %s, '%s')''' % (
-                    id, name, size, seeds, peers, hash, downloads, date)
+                sql = '''INSERT INTO table1 VALUES (%s, '%s', %s, %s, %s, '%s', %s, '%s', '%s')''' % (
+                    id, name, size, seeds, peers, hash, downloads, date, category)
                 self.c.execute(sql)
 
             self.conn.commit()
