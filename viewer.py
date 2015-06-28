@@ -6,10 +6,9 @@ from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 from PyQt5 import QtWebKitWidgets
-import sqlite3
-import os
 import urllib.parse
 from tarfile import TarFile
+import io
 
 tree_columns = ('id', 'name', 'size', 'seeds', 'peers', 'hash', 'downloads', 'date', 'category')
 tree_columns_visible = ('ID', 'Название', 'Размер', 'Сиды', 'Пиры', 'Hash', 'Скачиваний', 'Дата', 'Раздел')
@@ -20,7 +19,6 @@ class NumberSortModel(QSortFilterProxyModel):
         lvalue = left.data().toDouble()[0]
         rvalue = right.data().toDouble()[0]
         return lvalue < rvalue
-
 
 class MainWindow(QMainWindow):
     # noinspection PyUnresolvedReferences
@@ -79,34 +77,65 @@ class MainWindow(QMainWindow):
         self.tree.clicked.connect(self.do_select)
         self.tree.doubleClicked.connect(self.do_work)
 
-        self.init_db()
-
     def do_search(self):
         print('search')
-        limit = 1000
+        limit = 10
         text = self.input.text().replace("'", "''")
         category = self.input2.text()
-        words = text.split(' ')
-        sql = "SELECT * FROM table1 WHERE "
-        for w in words:
+
+        words_contains = []
+        words_not_contains = []
+        words_category = []
+
+        for w in text.split(' '):
             if (len(w) > 1) and (w[0]) == '-':
-                sql += " (name NOT LIKE '%" + w[1:] + "%') AND"
+                words_not_contains.append(w[1:])
             elif (len(w) > len('limit:')) and (w[:6] == 'limit:'):
                 limit = int(w[6:])
             else:
-                sql += " (name LIKE '%" + w + "%') AND"
-        sql = sql[:-3]
-        if category != '':
-            sql += " AND (category LIKE '%" + category + "%') "
-        sql += "ORDER BY seeds LIMIT %i" % limit
-        print(sql)  # DEBUG
-        items = self.c.execute(sql).fetchall()
+                words_contains.append(w)
+        for w in category.split(' '):
+            words_category.append(w)
+
+        items = []
+
+        archive = TarFile.open('table_sorted.tar.bz2', 'r:bz2')
+        member = archive.members[0]
+        buffered_reader = archive.extractfile(member)
+        buffered_text_reader = io.TextIOWrapper(buffered_reader, encoding='utf8')
+        for line in buffered_text_reader:
+            id, name, size, seeds, peers, hash, downloads, date, category = line.strip().split(sep='\t')
+            next = False
+            for w in words_contains:
+                if w.lower() in name.lower():
+                    pass
+                else:
+                    next = True
+                    break
+            if next:
+                continue
+            for w in words_not_contains:
+                if w.lower() in name.lower():
+                    next = True
+                    break
+            if next:
+                continue
+            for w in words_category:
+                if w.lower() in category.lower():
+                    pass
+                else:
+                    next = True
+                    break
+            if next:
+                continue
+            items.append([id, name, size, seeds, peers, hash, downloads, date, category])
+            if len(items) >= limit:
+                break
 
         self.statusbar.showMessage('Найдено %i записей' % len(items))
         self.model.setRowCount(len(items))
         for i in range(len(items)):
             for j in range(len(tree_columns)):
-                # text = ''
                 if j == tree_columns.index('size'):
                     size = int(items[i][j])
                     if size < 1024:
@@ -161,64 +190,6 @@ class MainWindow(QMainWindow):
             self.webview.setHtml(s)
         except FileNotFoundError:
             self.webview.setHtml('Нет описания')
-
-    def init_db(self):
-        db_name = 'db.sqlite'
-        if os.path.exists(db_name):
-            print('db exists')
-            self.conn = sqlite3.connect(db_name)
-            self.c = self.conn.cursor()
-            chksum_old = self.c.execute('SELECT value FROM main WHERE name=\'chksum\'').fetchone()[0]
-            size_old = self.c.execute('SELECT value FROM main WHERE name=\'size\'').fetchone()[0]
-
-            # crc32 = None
-            archive = TarFile.open('table.tar.bz2', 'r:bz2')
-            if 'table.txt' in archive.getnames():
-                member = archive.getmember('table.txt')
-                chksum = str(member.chksum)
-                size = str(member.size)
-                if not ((chksum == chksum_old) and (size == size_old)):
-                    archive.close()
-                    self.c.close()
-                    self.conn.close()
-                    os.remove(db_name)
-            else:
-                archive.close()
-                self.c.close()
-                self.conn.close()
-                os.remove(db_name)
-
-        if not os.path.exists(db_name):
-            print('db not exists')
-            # self.conn = sqlite3.connect(db_name)
-            self.conn = sqlite3.connect(':memory:')
-            # archive = TarFile.open('table.tar.bz2', 'r:bz2')
-            # member = archive.getmember('table.txt')
-            # chksum = member.chksum
-            # size = member.size
-            # f = archive.extractfile('table.txt').read().decode()
-            f = open('table.txt', 'r', encoding='utf8')
-            # f = x.read()
-
-            self.c = self.conn.cursor()
-            self.c.execute(
-                'CREATE TABLE table1 (id INT, name TEXT, size INT, seeds INT, peers INT, hash TEXT, downloads INT, DATE DATE, category TEXT)')
-            # self.c.execute('''CREATE VIRTUAL TABLE table1 USING fts4(tokenize=porter, id INT, name TEXT, size INT, seeds INT, peers INT, hash TEXT, downloads INT, DATE DATE)''')
-
-            self.c.execute('CREATE TABLE main (name TEXT, value TEXT)')
-            # self.c.execute('INSERT INTO main VALUES(\'chksum\', \'' + str(chksum) + '\')')
-            # self.c.execute('INSERT INTO main VALUES(\'size\', \'' + str(size) + '\')')
-
-            # for line in f.splitlines():
-            for line in f:
-                id, name, size, seeds, peers, hash, downloads, date, category = line.strip().split(sep='\t')
-                name = str.replace(name, "'", "''")
-                sql = '''INSERT INTO table1 VALUES (%s, '%s', %s, %s, %s, '%s', %s, '%s', '%s')''' % (
-                    id, name, size, seeds, peers, hash, downloads, date, category)
-                self.c.execute(sql)
-
-            self.conn.commit()
-
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
