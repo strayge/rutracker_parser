@@ -2,14 +2,15 @@
 # -*- coding: utf8 -*-
 
 import sys
-from PyQt5.QtCore import *
-from PyQt5.QtGui import *
-from PyQt5.QtWidgets import *
-from PyQt5 import QtWebKitWidgets
 import urllib.parse
 from tarfile import TarFile
 import io
 from datetime import datetime
+
+from PyQt5.QtCore import *
+from PyQt5.QtGui import *
+from PyQt5.QtWidgets import *
+from PyQt5 import QtWebKitWidgets
 
 tree_columns = ('id', 'name', 'size', 'seeds', 'peers', 'hash', 'downloads', 'date', 'category')
 tree_columns_visible = ('ID', 'Название', 'Размер', 'Сиды', 'Пиры', 'Hash', 'Скачиваний', 'Дата', 'Раздел')
@@ -22,7 +23,8 @@ class NumberSortModel(QSortFilterProxyModel):
         if not right.data():
             return False
 
-        if left.column() in [tree_columns.index('id'), tree_columns.index('seeds'), tree_columns.index('peers'), tree_columns.index('downloads')]:
+        if left.column() in [tree_columns.index('id'), tree_columns.index('seeds'), tree_columns.index('peers'),
+                             tree_columns.index('downloads')]:
             lvalue = int(left.data())
             rvalue = int(right.data())
         elif left.column() == tree_columns.index('date'):
@@ -52,6 +54,7 @@ class NumberSortModel(QSortFilterProxyModel):
             rvalue = right.data()
         return lvalue < rvalue
 
+
 class MainWindow(QMainWindow):
     # noinspection PyUnresolvedReferences
     def __init__(self):
@@ -59,9 +62,7 @@ class MainWindow(QMainWindow):
         frame = QFrame(self)
 
         self.result_count = 0
-
-        self.conn = None
-        self.c = None
+        self.founded_items = []
 
         self.grid = QGridLayout(frame)
         self.setCentralWidget(frame)
@@ -161,8 +162,6 @@ class MainWindow(QMainWindow):
             self.statusbar.showMessage(text + ' Найдено %i записей.' % len(self.founded_items))
 
     def do_search(self):
-        print('search')
-
         if self.search.text() == 'Отмена':
             if self.searcher and self.searcher.isRunning():
                 self.search.setText('Поиск')
@@ -182,7 +181,6 @@ class MainWindow(QMainWindow):
         self.timer.start()
 
     def do_work(self, index=None):
-        # print('double click')
         name = self.model.item(index.row(), tree_columns.index('name')).text()
         hash = self.model.item(index.row(), tree_columns.index('hash')).text()
         args = (
@@ -204,7 +202,7 @@ class MainWindow(QMainWindow):
     def do_select(self, index=None):
         id = int(self.model.item(index.row(), tree_columns.index('id')).text())
         try:
-            archive = TarFile.open('descr/%03i/%05i.tar.bz2' % (id // 100000, id // 1000), 'r:bz2' )
+            archive = TarFile.open('descr/%03i/%05i.tar.bz2' % (id // 100000, id // 1000), 'r:bz2')
             s = archive.extractfile('%08i' % id).read().decode()
             archive.close()
             self.webview.setHtml(s)
@@ -283,6 +281,7 @@ class SearchThread(QThread):
             if founded_items >= limit:
                 self.status.emit('Поиск закончен.')
                 break
+
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
