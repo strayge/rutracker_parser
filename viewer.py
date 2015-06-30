@@ -74,6 +74,9 @@ class MainWindow(QMainWindow):
         separator = QSplitter()
         self.statusbar = QStatusBar()
         self.setStatusBar(self.statusbar)
+        self.timer = QTimer(self)
+        self.timer.setInterval(1000)
+        self.timer.timeout.connect(self.do_update_table)
 
         self.model = QStandardItemModel()
         proxy = NumberSortModel()
@@ -114,48 +117,48 @@ class MainWindow(QMainWindow):
         self.searcher = None
         self.first_result = False
 
-    def do_show_results(self, args):
-        items, last = args
-        self.result_count = len(items)
-        self.model.setRowCount(len(items))
-        for i in range(len(items)):
+    def do_update_table(self, finish=False):
+        if finish:
+            self.timer.stop()
+        self.model.setRowCount(len(self.founded_items))
+        for i in range(self.result_count, len(self.founded_items)):
             for j in range(len(tree_columns)):
-                if j == tree_columns.index('size'):
-                    size = int(items[i][j])
-                    if size < 1024:
-                        text = '%.0f B' % (float(items[i][j]))
-                    elif size < 1024 * 1024:
-                        text = '%.0f KB' % (float(items[i][j]) / (1024))
-                    elif size < 1024 * 1024 * 1024:
-                        text = '%.0f MB' % (float(items[i][j]) / (1024 * 1024))
-                    else:
-                        text = '%.2f GB' % (float(items[i][j]) / (1024 * 1024 * 1024))
-                # elif (j == tree_columns.index('seeds')) or (j == tree_columns.index('peers')) \
-                #         or (j == tree_columns.index('id')) or (j == tree_columns.index('downloads')):
-                #     # text = int(items[i][j])
-                #     text = items[i][j]
-                else:
-                    text = str(items[i][j])
-                item = QStandardItem()
-                item.setData(QVariant(text), Qt.DisplayRole)
-                # item.setData(QVariant(items[i][j]), Qt.DisplayRole)
-                self.model.setItem(i, j, item)
+                item = self.founded_items[i]
+                qitem = QStandardItem()
+                qitem.setData(QVariant(item[j]), Qt.DisplayRole)
+                self.model.setItem(i, j, qitem)
+            self.result_count += 1
 
-        if self.first_result:
-            self.first_result = False
-            self.tree.sortByColumn(tree_columns.index('seeds'), Qt.DescendingOrder)
-            self.tree.resizeColumnsToContents()
-            if self.tree.columnWidth(tree_columns.index('name')) > 500:
-                self.tree.setColumnWidth(tree_columns.index('name'), 500)
-
-        if last:
-            self.statusbar.showMessage('Поиск закончен. Найдено %i записей' % len(items))
+        # self.tree.sortByColumn(tree_columns.index('seeds'), Qt.DescendingOrder)
+        self.tree.resizeColumnsToContents()
+        if self.tree.columnWidth(tree_columns.index('name')) > 500:
+            self.tree.setColumnWidth(tree_columns.index('name'), 500)
+        if finish:
+            self.timer.stop()
+            self.statusbar.showMessage('Поиск закончен. Найдено %i записей' % len(self.founded_items))
             self.search.setText('Поиск')
         else:
-            self.statusbar.showMessage('Идет поиск... Найдено %i записей' % len(items))
+            self.statusbar.showMessage('Идет поиск... Найдено %i записей' % self.result_count)
+
+    def do_add_founded_item(self, item):
+        for j in range(len(tree_columns)):
+            if j == tree_columns.index('size'):
+                size = int(item[j])
+                if size < 1024:
+                    item[j] = '%.0f B' % (float(item[j]))
+                elif size < 1024 * 1024:
+                    item[j] = '%.0f KB' % (float(item[j]) / 1024)
+                elif size < 1024 * 1024 * 1024:
+                    item[j] = '%.0f MB' % (float(item[j]) / (1024 * 1024))
+                else:
+                    item[j] = '%.2f GB' % (float(item[j]) / (1024 * 1024 * 1024))
+        self.founded_items.append(item)
 
     def do_show_status(self, text):
-        self.statusbar.showMessage(text + ' Найдено %i записей.' % self.result_count)
+        if text == 'Поиск закончен.':
+            self.do_update_table(True)
+        else:
+            self.statusbar.showMessage(text + ' Найдено %i записей.' % len(self.founded_items))
 
     def do_search(self):
         print('search')
@@ -164,15 +167,19 @@ class MainWindow(QMainWindow):
             if self.searcher and self.searcher.isRunning():
                 self.search.setText('Поиск')
                 self.searcher.stop()
+                self.timer.stop()
                 return
 
         self.first_result = True
         self.search.setText('Отмена')
         self.result_count = 0
+        self.founded_items = []
+        self.model.setRowCount(0)
         self.searcher = SearchThread(self.input.text(), self.input2.text())
-        self.searcher.results.connect(self.do_show_results)
+        self.searcher.add_founded_item.connect(self.do_add_founded_item)
         self.searcher.status.connect(self.do_show_status)
         self.searcher.start(QThread.LowestPriority)
+        self.timer.start()
 
     def do_work(self, index=None):
         # print('double click')
@@ -204,9 +211,9 @@ class MainWindow(QMainWindow):
         except FileNotFoundError:
             self.webview.setHtml('Нет описания')
 
-class SearchThread(QThread):
 
-    results = pyqtSignal(object)
+class SearchThread(QThread):
+    add_founded_item = pyqtSignal(object)
     status = pyqtSignal(object)
 
     def __init__(self, text, category):
@@ -237,18 +244,18 @@ class SearchThread(QThread):
         for w in category.split(' '):
             words_category.append(w)
 
-        items = []
-
         archive = TarFile.open('table_sorted.tar.bz2', 'r:bz2')
         member = archive.members[0]
         buffered_reader = archive.extractfile(member)
         buffered_text_reader = io.TextIOWrapper(buffered_reader, encoding='utf8')
 
+        founded_items = 0
+
         for line in buffered_text_reader:
-            id, name, size, seeds, peers, hash, downloads, date, category = line.strip().split(sep='\t')
+            item = line.strip().split(sep='\t')
             next = False
             for w in words_contains:
-                if w.lower() in name.lower():
+                if w.lower() in item[tree_columns.index('name')].lower():
                     pass
                 else:
                     next = True
@@ -256,13 +263,13 @@ class SearchThread(QThread):
             if next:
                 continue
             for w in words_not_contains:
-                if w.lower() in name.lower():
+                if w.lower() in item[tree_columns.index('name')].lower():
                     next = True
                     break
             if next:
                 continue
             for w in words_category:
-                if w.lower() in category.lower():
+                if w.lower() in item[tree_columns.index('category')].lower():
                     pass
                 else:
                     next = True
@@ -270,11 +277,10 @@ class SearchThread(QThread):
             if next:
                 continue
 
-            items.append([id, name, size, seeds, peers, hash, downloads, date, category])
-            self.results.emit([items, False])
+            founded_items += 1
+            self.add_founded_item.emit(item)
 
-            if len(items) >= limit:
-                self.results.emit([items, True])
+            if founded_items >= limit:
                 self.status.emit('Поиск закончен.')
                 break
 
