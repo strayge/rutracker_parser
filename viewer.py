@@ -9,6 +9,7 @@ from PyQt5 import QtWebKitWidgets
 import urllib.parse
 from tarfile import TarFile
 import io
+from datetime import datetime
 
 tree_columns = ('id', 'name', 'size', 'seeds', 'peers', 'hash', 'downloads', 'date', 'category')
 tree_columns_visible = ('ID', 'Название', 'Размер', 'Сиды', 'Пиры', 'Hash', 'Скачиваний', 'Дата', 'Раздел')
@@ -16,8 +17,39 @@ tree_columns_visible = ('ID', 'Название', 'Размер', 'Сиды', '�
 
 class NumberSortModel(QSortFilterProxyModel):
     def lessThan(self, left, right):
-        lvalue = left.data().toDouble()[0]
-        rvalue = right.data().toDouble()[0]
+        if not left.data():
+            return True
+        if not right.data():
+            return False
+
+        if left.column() in [tree_columns.index('id'), tree_columns.index('seeds'), tree_columns.index('peers'), tree_columns.index('downloads')]:
+            lvalue = int(left.data())
+            rvalue = int(right.data())
+        elif left.column() == tree_columns.index('date'):
+            lvalue = datetime.strptime(left.data(), '%d-%b-%y %H:%M')
+            rvalue = datetime.strptime(right.data(), '%d-%b-%y %H:%M')
+        elif left.column() == tree_columns.index('size'):
+            lvalue = left.data()
+            rvalue = right.data()
+            if lvalue[-2:] == ' B':
+                lvalue = float(lvalue[:-2])
+            elif lvalue[-3:] == ' KB':
+                lvalue = float(lvalue[:-3]) * 1024
+            elif lvalue[-3:] == ' MB':
+                lvalue = float(lvalue[:-3]) * 1024 * 1024
+            elif lvalue[-3:] == ' GB':
+                lvalue = float(lvalue[:-3]) * 1024 * 1024 * 1024
+            if rvalue[-2:] == ' B':
+                rvalue = float(rvalue[:-2])
+            elif rvalue[-3:] == ' KB':
+                rvalue = float(rvalue[:-3]) * 1024
+            elif rvalue[-3:] == ' MB':
+                rvalue = float(rvalue[:-3]) * 1024 * 1024
+            elif rvalue[-3:] == ' GB':
+                rvalue = float(rvalue[:-3]) * 1024 * 1024 * 1024
+        else:
+            lvalue = left.data()
+            rvalue = right.data()
         return lvalue < rvalue
 
 class MainWindow(QMainWindow):
@@ -25,6 +57,8 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super(MainWindow, self).__init__()
         frame = QFrame(self)
+
+        self.result_count = 0
 
         self.conn = None
         self.c = None
@@ -44,7 +78,7 @@ class MainWindow(QMainWindow):
         self.model = QStandardItemModel()
         proxy = NumberSortModel()
         proxy.setSourceModel(self.model)
-        self.tree.setModel(self.model)
+        self.tree.setModel(proxy)
         self.model.setColumnCount(len(tree_columns))
         self.model.setHorizontalHeaderLabels(tree_columns_visible)
         self.tree.verticalHeader().setVisible(False)
@@ -77,62 +111,12 @@ class MainWindow(QMainWindow):
         self.tree.clicked.connect(self.do_select)
         self.tree.doubleClicked.connect(self.do_work)
 
-    def do_search(self):
-        print('search')
-        limit = 10
-        text = self.input.text().replace("'", "''")
-        category = self.input2.text()
+        self.searcher = None
+        self.first_result = False
 
-        words_contains = []
-        words_not_contains = []
-        words_category = []
-
-        for w in text.split(' '):
-            if (len(w) > 1) and (w[0]) == '-':
-                words_not_contains.append(w[1:])
-            elif (len(w) > len('limit:')) and (w[:6] == 'limit:'):
-                limit = int(w[6:])
-            else:
-                words_contains.append(w)
-        for w in category.split(' '):
-            words_category.append(w)
-
-        items = []
-
-        archive = TarFile.open('table_sorted.tar.bz2', 'r:bz2')
-        member = archive.members[0]
-        buffered_reader = archive.extractfile(member)
-        buffered_text_reader = io.TextIOWrapper(buffered_reader, encoding='utf8')
-        for line in buffered_text_reader:
-            id, name, size, seeds, peers, hash, downloads, date, category = line.strip().split(sep='\t')
-            next = False
-            for w in words_contains:
-                if w.lower() in name.lower():
-                    pass
-                else:
-                    next = True
-                    break
-            if next:
-                continue
-            for w in words_not_contains:
-                if w.lower() in name.lower():
-                    next = True
-                    break
-            if next:
-                continue
-            for w in words_category:
-                if w.lower() in category.lower():
-                    pass
-                else:
-                    next = True
-                    break
-            if next:
-                continue
-            items.append([id, name, size, seeds, peers, hash, downloads, date, category])
-            if len(items) >= limit:
-                break
-
-        self.statusbar.showMessage('Найдено %i записей' % len(items))
+    def do_show_results(self, args):
+        items, last = args
+        self.result_count = len(items)
         self.model.setRowCount(len(items))
         for i in range(len(items)):
             for j in range(len(tree_columns)):
@@ -146,9 +130,10 @@ class MainWindow(QMainWindow):
                         text = '%.0f MB' % (float(items[i][j]) / (1024 * 1024))
                     else:
                         text = '%.2f GB' % (float(items[i][j]) / (1024 * 1024 * 1024))
-                elif (j == tree_columns.index('seeds')) or (j == tree_columns.index('peers')) \
-                        or (j == tree_columns.index('id')) or (j == tree_columns.index('downloads')):
-                    text = int(items[i][j])
+                # elif (j == tree_columns.index('seeds')) or (j == tree_columns.index('peers')) \
+                #         or (j == tree_columns.index('id')) or (j == tree_columns.index('downloads')):
+                #     # text = int(items[i][j])
+                #     text = items[i][j]
                 else:
                     text = str(items[i][j])
                 item = QStandardItem()
@@ -156,10 +141,38 @@ class MainWindow(QMainWindow):
                 # item.setData(QVariant(items[i][j]), Qt.DisplayRole)
                 self.model.setItem(i, j, item)
 
-        self.tree.sortByColumn(tree_columns.index('seeds'), Qt.DescendingOrder)
-        self.tree.resizeColumnsToContents()
-        if self.tree.columnWidth(tree_columns.index('name')) > 500:
-            self.tree.setColumnWidth(tree_columns.index('name'), 500)
+        if self.first_result:
+            self.first_result = False
+            self.tree.sortByColumn(tree_columns.index('seeds'), Qt.DescendingOrder)
+            self.tree.resizeColumnsToContents()
+            if self.tree.columnWidth(tree_columns.index('name')) > 500:
+                self.tree.setColumnWidth(tree_columns.index('name'), 500)
+
+        if last:
+            self.statusbar.showMessage('Поиск закончен. Найдено %i записей' % len(items))
+            self.search.setText('Поиск')
+        else:
+            self.statusbar.showMessage('Идет поиск... Найдено %i записей' % len(items))
+
+    def do_show_status(self, text):
+        self.statusbar.showMessage(text + ' Найдено %i записей.' % self.result_count)
+
+    def do_search(self):
+        print('search')
+
+        if self.search.text() == 'Отмена':
+            if self.searcher and self.searcher.isRunning():
+                self.search.setText('Поиск')
+                self.searcher.stop()
+                return
+
+        self.first_result = True
+        self.search.setText('Отмена')
+        self.result_count = 0
+        self.searcher = SearchThread(self.input.text(), self.input2.text())
+        self.searcher.results.connect(self.do_show_results)
+        self.searcher.status.connect(self.do_show_status)
+        self.searcher.start(QThread.LowestPriority)
 
     def do_work(self, index=None):
         # print('double click')
@@ -190,6 +203,80 @@ class MainWindow(QMainWindow):
             self.webview.setHtml(s)
         except FileNotFoundError:
             self.webview.setHtml('Нет описания')
+
+class SearchThread(QThread):
+
+    results = pyqtSignal(object)
+    status = pyqtSignal(object)
+
+    def __init__(self, text, category):
+        QThread.__init__(self)
+        self.text = text
+        self.category = category
+
+    def stop(self):
+        self.status.emit('Поиск остановлен.')
+        self.terminate()
+
+    def run(self):
+        limit = 20
+        text = self.text
+        category = self.category
+
+        words_contains = []
+        words_not_contains = []
+        words_category = []
+
+        for w in text.split(' '):
+            if (len(w) > 1) and (w[0]) == '-':
+                words_not_contains.append(w[1:])
+            elif (len(w) > len('limit:')) and (w[:6] == 'limit:'):
+                limit = int(w[6:])
+            else:
+                words_contains.append(w)
+        for w in category.split(' '):
+            words_category.append(w)
+
+        items = []
+
+        archive = TarFile.open('table_sorted.tar.bz2', 'r:bz2')
+        member = archive.members[0]
+        buffered_reader = archive.extractfile(member)
+        buffered_text_reader = io.TextIOWrapper(buffered_reader, encoding='utf8')
+
+        for line in buffered_text_reader:
+            id, name, size, seeds, peers, hash, downloads, date, category = line.strip().split(sep='\t')
+            next = False
+            for w in words_contains:
+                if w.lower() in name.lower():
+                    pass
+                else:
+                    next = True
+                    break
+            if next:
+                continue
+            for w in words_not_contains:
+                if w.lower() in name.lower():
+                    next = True
+                    break
+            if next:
+                continue
+            for w in words_category:
+                if w.lower() in category.lower():
+                    pass
+                else:
+                    next = True
+                    break
+            if next:
+                continue
+
+            items.append([id, name, size, seeds, peers, hash, downloads, date, category])
+            self.results.emit([items, False])
+
+            if len(items) >= limit:
+                self.results.emit([items, True])
+                self.status.emit('Поиск закончен.')
+                break
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
