@@ -8,6 +8,8 @@ db.sqlite
 ids.txt
 proxy.txt
 login.txt
+ids_ignored.txt
+cookies.txt
 
 # Results
 finished.txt
