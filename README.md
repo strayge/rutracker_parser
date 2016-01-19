@@ -55,7 +55,7 @@ For work needs:
   * 00100.tar.bz2, 00101.tar.bz2, ..., 00199.tar.bz2 for 001
 
 Screenshot
-[Screenshot](viewer_screenshot.png)
+![Screenshot](viewer_screenshot.png?raw=true)
 
 In search:
 * **word** for include word
