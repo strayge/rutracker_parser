@@ -2,408 +2,215 @@
 # -*- coding: cp1251 -*-
 
 import os
-import argparse
+from settings import Settings
+import parser
 import random
-import socket
-from html.parser import unescape
 from multiprocessing import Queue, freeze_support, Process, current_process
-import queue
-import socks
-import requests
+import queue # for exceptions
+import logging
 import time
+import requests
+import signal
 
-default_login = 'LOGIN'
-default_password = 'PASSWORD'
-default_proxy_port = 9150
-default_threads_num = 1
-default_ids_file = 'ids.txt'
-table_file = "table.txt"
-default_html_folder = 'html'
-default_descr_folder = 'descr'
-default_proxy_file = 'proxy.txt'
-default_login_file = 'login.txt'
+def worker(input, output):
+    try:
+        log = logging.getLogger("thread(%3i)" % random.randrange(1, 999)) # random name
+        log.debug('starting thread')
 
-class SomeError(Exception):
-    def __init__(self, value, fatal=True):
-        self.value = value
-        self.fatal = fatal
-
-    def __str__(self):
-        return repr(self.value)
-
-
-def get_rutracker_cookie(login, password):
-    post_params = {
-        'login_username': login,
-        'login_password': password,
-        'login': b'\xe2\xf5\xee\xe4'  # '%E2%F5%EE%E4'
-    }
-    r = requests.post('http://login.rutracker.org/forum/login.php', data=post_params, allow_redirects=False, timeout=(6, 27))
-    if 'bb_data' in r.cookies.keys():
-        cookie = 'bb_data=' + r.cookies['bb_data'] + '; tr_simple=1; spylog_test=1'
-        print('DEBUG', 'cookie =', cookie)  # DEBUG
-        return cookie
-    else:
-        raise SomeError('no cookies, get_rutracker_cookie')
-
-
-def is_logined(html):
-    if "action=\"http://login.rutracker.org/forum/login.php\">" in html:
-        return False
-    else:
-        return True
-
-
-def parse_rutracker(id, html):
-    def between(text, p_from, p_to):
-        return text.split(p_from)[1].split(p_to)[0]
-
-    def fix_date(date):
-        date = date.replace("Янв", "Jan")
-        date = date.replace("Фев", "Feb")
-        date = date.replace("Мар", "Mar")
-        date = date.replace("Апр", "Apr")
-        date = date.replace("Май", "May")
-        date = date.replace("Июн", "Jun")
-        date = date.replace("Июл", "Jul")
-        date = date.replace("Авг", "Aug")
-        date = date.replace("Сен", "Sep")
-        date = date.replace("Окт", "Oct")
-        date = date.replace("Ноя", "Nov")
-        date = date.replace("Дек", "Dec")
-        return date
-
-    def do_with(id, text):
-        if not ('tor-hash' in text):
-            raise SomeError('no hash', fatal=False)
-            # return id, 'ERROR', 'NO HASH'
-        else:
-            line = list()
-            line.append(str(id))
-            title = between(text, '<title>', ' :: RuTracker.org')
-            title = unescape(title)
-            line.append(title)
-            size = between(text, '<span id="tor-size-humn"', '</span>')
-            line.append(size)
-            seeds = '0'
-            if '<span class="seed">Сиды:&nbsp; <b>' in text:
-                seeds = between(text, 'seed">Сиды:&nbsp; <b>', '</b>')
-            line.append(seeds)
-            peers = '0'
-            if 'leech">Личи:&nbsp; <b>' in text:
-                peers = between(text, 'leech">Личи:&nbsp; <b>', '</b>')
-            line.append(peers)
-            hash = between(text, 'tor-hash">', "</span>")
-            line.append(hash)
-            if 'torrent скачан:&nbsp; <b>' in text:
-                downloads = between(text, 'torrent скачан:&nbsp; <b>', " раз")
-            elif '<td>.torrent скачан:</td>\n\t\t<td>' in text:
-                downloads = between(text, '<td>.torrent скачан:</td>\n\t\t<td>', " раз")
+        for new_input in iter(input.get, ('STOP',{})):
+            # log.debug('thread iteration')
+            new_input[1]['logger'] = log
+            if new_input[0] == 'COOKIE':
+                status, details = parser.get_cookie(new_input[1])
+                output.put((new_input[0], status, details))
+            elif new_input[0] == 'GET_PAGE':
+                time.sleep(3)
+                status, details = parser.get_page(new_input[1])
+                output.put((new_input[0], status, details))
             else:
-                downloads = between(text, 'Скачан: ', 'раз\t\t</td>')
-            line.append(downloads)
-            if 'Зарегистрирован &nbsp;[ ' in text:
-                date = between(text, 'Зарегистрирован &nbsp;[ ', ' ]')
-            else:
-                date = between(text, 'зарегистрирован">[ ', ' ]<')
-            date = fix_date(date)
-            line.append(date)
-
-            category_htmlpart = between(text, '<td class="nav w100"', '</td>')
-            category_temp = category_htmlpart.replace('">', "</a>").split('</a>')
-            category_list = list((i for i in category_temp if
-                                  ('<em>' not in i) and ('\t' not in i) and ('style="' not in i) and ('Список форумов ' not in i)))
-            category_string = ''
-            for one_category in category_list:
-                category_string += one_category + ' | '
-            category_string = category_string[:-3]
-            line.append(category_string)
-
-            line = '\t'.join(line)
-            descr = between(text, '<div class="post_body" id="', '<div class="clear"></div>')
-            descr = descr.split('>', 1)[1]
-            descr = descr.strip()
-            if descr.endswith('</div>'):
-                descr = descr[:-6]
-            descr = unescape(descr)
-            return id, line, descr
-
-    text = html
-    if 'profile.php?mode=register">' in text:
-        raise SomeError('no login', fatal=False)
-    if len(text) < 1000:
-        raise SomeError('too short', fatal=False)
-    f = open('html.txt', "w")
-    f.write(text)
-    return do_with(id, text)
-
-
-def process_rutracker_page(id, headers):
-    path = '/forum/viewtopic.php?t=%(id)i' % {'id': id}
-    url = 'http://rutracker.org%(path)s' % {'path': path}
-    req = requests.get(url, headers=headers)
-    html = req.text
-    if not (('<html>' in html) or ('<HTML>' in html)):
-        raise SomeError('not html in response', fatal=False)
-    if not is_logined(html):
-        raise SomeError('not logined')
-    return parse_rutracker(id, html)
-
-
-def worker(input, output, cookie, proxy, options):
-    if options.noproxy:
-        print('no using proxy')
-    else:
-        print(('using proxy, port ' + str(proxy)))
-        socks.setdefaultproxy(socks.PROXY_TYPE_SOCKS5, "127.0.0.1", proxy)
-        socket.socket = socks.socksocket
-
-    useragents = ['Mozilla/5.0 (Android; Mobile; rv:38.0) Gecko/38.0 Firefox/38.0',
-                  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_3) AppleWebKit/600.6.3 (KHTML, like Gecko) Version/8.0.6 Safari/600.6.3',
-                  'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:38.0) Gecko/20100101 Firefox/38.0',
-                  'Mozilla/5.0 (Windows NT 6.3; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/43/0/2357/81 Safari/537.36',
-                  'Mozilla/5.0 (Windows NT 6.3; WOW64; rv:38.0) Gecko/20100101 Firefox/38.0',
-                  'Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; rv:11.0) like Gecko',
-                  'Mozilla/5.0 (X11; Ubunru; Linux x86_64; rv:38.0) Gecko/20100101 Firefox/38.0',
-                  'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/43.0.2357.124 Safari/537.36',
-                  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_5) AppleWebKit/600.6.3 (KHTML, like Gecko) Version/7.1.5 Safari/537.85.15',
-                  'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:42.0) Gecko/20100101 Firefox/42.0',
-                  'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:42.0) Gecko/20100101 Firefox/42.0'
-                  ]
-
-    headers = {
-        'Accept-Encoding': 'gzip,deflate',
-        'Host': 'rutracker.org',
-        'Accept-Language': 'ru,en-US;q=0.8,en;q=0.6',
-        'User-Agent': useragents[random.randrange(0, len(useragents))],
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Referer': 'http://rutracker.org/forum/index.php',
-        'Cookie': cookie,
-        'Connection': 'keep-alive'
-    }
-
-    for id in iter(input.get, 'STOP'):
-        try:
-            result = process_rutracker_page(id, headers)
-            output.put(result)
-        except requests.exceptions.RequestException:
-            output.put(id, 'ERROR', 'Connection error')
-        except SomeError as e:
-            output.put((id, 'ERROR', e.value))
-            if e.fatal:
-                output.put(current_process().name, 'ERROR', 'Thread terminated.')
-                exit()
-        time.sleep(3)
-
+                log.warning('unknown task: %s' % new_input[0])
+    except KeyboardInterrupt:
+        pass
 
 if __name__ == '__main__':
     freeze_support()
 
-    ap = argparse.ArgumentParser()
-    ids_group = ap.add_mutually_exclusive_group(required=True)
-    ids_group.add_argument('--ids_file', '-if')
-    ids_group.add_argument('--ids', nargs=2, type=int)
-    ap.add_argument('--old', '-old')
-    ap.add_argument('--noproxy', '--direct', '-d', action="store_true")
-    ap.add_argument('--port', '-p')
-    ap.add_argument('--user', '-u')
-    ap.add_argument('--password', '-pw')
-    ap.add_argument('--html')
-    ap.add_argument('--folder', '-f')
-    ap.add_argument('--cookie')
-    ap.add_argument('--cookies_list')
-    ap.add_argument('--random', action="store_true")
-    ap.add_argument('--threads', '-tr', type=int)
-    ap.add_argument('--proxy_file', '-pf', '-pr')
-    ap.add_argument('--login_file', '-lf')
-    ap.add_argument('--restore', '--resume', action="store_true")
-    ap.add_argument('--print', action="store_true")
-    options = ap.parse_args()
+    format = '%(asctime)s\t%(name)s\t%(levelname)s\t%(message)s'
+    logging.basicConfig(level=logging.INFO, format=format, filename='log.txt')
+    # logging.basicConfig(level=logging.DEBUG, format=format, filename='log.txt')
+    consoleHandler = logging.StreamHandler()
+    consoleHandler.setFormatter(logging.Formatter(format))
+    logging.getLogger().addHandler(consoleHandler)
+    log = logging.getLogger(__name__)
 
-    LOGIN = options.user if options.user else default_login
-    PASSWORD = options.password if options.password else default_password
-    ids_file = options.ids_file if options.ids_file else default_ids_file
-    html_folder = options.html if options.html else default_html_folder
-    threads_num = int(options.threads) if options.threads else default_threads_num
-    descr_folder = options.folder if options.folder else default_descr_folder
-    proxy_file = options.proxy_file if options.proxy_file else default_proxy_file
-    login_file = options.login_file if options.login_file else default_login_file
-    proxy_port = int(options.port) if options.port else default_proxy_port
+    # disable debug logging for urllib3 in requests
+    urllib3_logger = logging.getLogger('urllib3')
+    urllib3_logger.setLevel(logging.CRITICAL)
 
-    if options.html:
-        html_folder = options.html
+    log.info("\n\n\n========== Program started ==========")
 
-    task_queue = Queue()
-    done_queue = Queue()
+    try:
+        settings = Settings()
 
-    proxy_list = list()
-    if options.port:
-        proxy_list.append(options.port)
-    elif os.path.exists(proxy_file):
-        proxy_list = list(map(str.strip, open(proxy_file)))  # read file, remove \n
-    if len(proxy_list) == 0:
-        proxy_list = list({proxy_port})
-    random.shuffle(proxy_list)
+        task_queue = Queue()
+        done_queue = Queue()
 
-    login_list = {}
-    if os.path.exists(login_file):
-        login_list = list(map(str.split, open(login_file)))  # read file, split user pass
-    if len(login_list) == 0:
-        login_list = list({(LOGIN, PASSWORD)})
-    random.shuffle(login_list)
+        processes = list()
+        log.info("numbers of threads: %i" % settings.threads_num)
+        for i in range(settings.threads_num):
+            p = Process(target=worker, args=(task_queue, done_queue))
+            p.start()
+            processes.append(p)
 
-    cookie_proxy_list = []
+        settings.prepare_lists()
+        settings.open_files()
 
-    if not options.cookies_list:
-        last_i = 0
-        for i in range(len(login_list)):
-            last_i = i
-            l, p = login_list[i]
-            proxy = int(proxy_list[i % len(proxy_list)])
-            if options.noproxy:
-                # print('no using proxy')
-                pass
+        def stop_threads_and_exit():
+            log.debug('Stopping all threads and exitting')
+            for i in range(settings.threads_num):
+                task_queue.put(('STOP', {}))
+            exit()
+
+        if settings.print:
+            stop_threads_and_exit()
+
+        if len(settings.ids) == 0:
+            log.info('Empty input/left list. Terminated')
+            stop_threads_and_exit()
+
+        settings.load_cookies()
+        for i in range(len(settings.login_list)):
+            if ('cookie' not in settings.login_list[i].keys()) or (settings.login_list[i]['cookie'] == ''):
+                proxy = settings.get_free_proxy()
+                work = ('COOKIE', {'username': settings.login_list[i]['username'], 'password': settings.login_list[i]['password'],
+                                   'proxy_ip': proxy['ip'], 'proxy_port': int(proxy['port'])})
+                task_queue.put(work)
+
+        ids_pointer = 0
+        # bulk = 30
+
+        nexttime = time.time()
+        exit_counter = 0
+        status_nexttime = time.time()
+        ids_status = {'finished_all':0, 'error_all':0, 'nohash_all':0,'finished_last':0, 'error_last':0, 'nohash_last':0}
+        while True:
+            if time.time() > status_nexttime:
+                status_nexttime = time.time() + 10
+                speed = (ids_status['finished_last'] + ids_status['nohash_last']) / 10.0
+                if speed != 0:
+                    time_remaining = (len(settings.ids) - ids_pointer) / speed
+                else:
+                    time_remaining = 0
+                m, s = divmod(time_remaining, 60)
+                h, m = divmod(m, 60)
+                print('Last 10 sec: %3d - OK, %3d - NOHASH, %2d - ERROR, Remaining: %ik, %d:%02d"' % (ids_status['finished_last'], ids_status['nohash_last'],
+                                                                                                ids_status['error_last'], (len(settings.ids) - ids_pointer)//1000,h,m))
+                ids_status['finished_all'] += ids_status['finished_last']
+                ids_status['error_all'] += ids_status['error_last']
+                ids_status['nohash_all'] += ids_status['nohash_last']
+                ids_status['finished_last'] = 0
+                ids_status['error_last'] = 0
+                ids_status['nohash_last'] = 0
+            # adding new tasks
+            if (task_queue.qsize() < settings.qsize) and (ids_pointer < len(settings.ids)):
+                id_max = min(ids_pointer + settings.qsize, len(settings.ids))
+                for i in range(ids_pointer, id_max):
+                    proxy = settings.get_free_proxy()
+                    if not proxy:
+                        if time.time() > nexttime:
+                            log.warning('free proxy not available')
+                            log.debug('proxies: %s' % str(settings.proxy_list))
+                            nexttime = time.time() + 60
+                        break
+                    cookie = settings.get_free_cookie()
+                    if not cookie:
+                        if time.time() > nexttime:
+                            log.warning('free cookie not available')
+                            log.debug('cookies: %s' % str(settings.login_list))
+                            nexttime = time.time() + 60
+                        break
+                    work = ('GET_PAGE', {'id': int(settings.ids[i]), 'cookie': cookie, 'headers': settings.headers, 'proxy_ip': proxy['ip'], 'proxy_port': int(proxy['port'])})
+                    task_queue.put(work)
+                    ids_pointer += 1
+
+            if task_queue.empty() and done_queue.empty():
+                # common part
+                if exit_counter > 1:
+                    log.info('Queues are empty.')
+                time.sleep(1)
+                exit_counter += 1
+                if exit_counter > 5:
+                    stop_threads_and_exit()
             else:
-                # print(('using proxy, port ' + str(proxy)))
-                socks.setdefaultproxy(socks.PROXY_TYPE_SOCKS5, "127.0.0.1", proxy)
-                socket.socket = socks.socksocket
+                exit_counter = 0
 
             try:
-                cookie = get_rutracker_cookie(l, p)
-                cookie_proxy_list.append([cookie, proxy])
-                print('OK, proxy: ' + str(proxy) + ', login: ' + l)
-            except:
-                print('ERROR, proxy: ' + str(proxy) + ', login: ' + l)
-            time.sleep(0.7)
+                task, status, details = done_queue.get(timeout=1)
+            except queue.Empty:
+                anybody_alive = False
+                for j in range(len(processes)):
+                    if processes[j].is_alive():
+                        anybody_alive = True
+                        break
+                if anybody_alive:
+                    continue
+                else:
+                    log.info('All threads died, exit.')
+                    exit()
 
-            if len(cookie_proxy_list) >= threads_num:
-                print('stop cookies, break')
-                break
-            print('cookie_proxy_list length: ' + str(len(cookie_proxy_list)))
-
-        max_threads = min(len(cookie_proxy_list) * 2, threads_num)
-        print('max threads =', max_threads)
-        for j in range(max_threads - len(cookie_proxy_list)):
-            proxy = int(proxy_list[(last_i + j) % len(proxy_list)])
-            cookie_proxy_list.append([cookie_proxy_list[j][0], proxy])
-    else:
-        f = open(options.cookies_list)
-        for line in f:
-            c, p = line.split(', ')
-            cookie_proxy_list.append([c, int(p)])
-
-    processes = list()
-    for i in range(min(threads_num, len(cookie_proxy_list))):
-        login, password = login_list[i % len(login_list)]
-        cookie, proxy = cookie_proxy_list[i % len(cookie_proxy_list)]
-        # proxy = int(proxy_list[i % len(proxy_list)])
-        time.sleep(1)
-        p = Process(target=worker, args=(task_queue, done_queue, cookie, proxy, options))
-        p.start()
-        processes.append(p)
-
-    if options.ids_file:
-        ids = set(map(int, open(ids_file)))
-    else:
-        ids = set(range(options.ids[0], options.ids[1]))
-
-    if options.old:
-        max_id = 0
-        #ignoring blank lines
-        old_ids = set(map(int, filter(lambda s: s != '', map(lambda s: s.strip(), open(options.old)))))
-        # old_ids = set(map(int, open(options.old)))
-        for id in old_ids:
-            if id > max_id:
-                max_id = id
-        for id in range(1, max_id):
-            if (id not in old_ids) and (id in ids):
-                ids.remove(id)
-
-    if options.restore:
-        ids_finished = set(map(int, open('finished.txt')))
-        ids_new = []
-        for id in ids:
-            if id not in ids_finished:
-                ids_new.append(id)
-        print('input:   \t', len(ids))
-        print('finished:\t', len(ids_finished))
-        print('left:    \t', len(ids_new))
-        ids = ids_new
-
-    print(len(ids))
-    if options.print:
-        exit()
-
-    if len(ids) == 0:
-        print('Empty input/left list. Terminated.')
-        exit()
-
-    if options.random:
-        random.shuffle(ids)
-
-    for number, id in enumerate(ids):
-        id = int(id)
-        task_queue.put(id)
-
-    for i in range(len(cookie_proxy_list)):
-        task_queue.put('STOP')
-
-    handle_table_file = open(table_file, 'a', encoding='utf8')
-
-    # if not os.path.exists(html_folder):
-    #     os.mkdir(html_folder)
-
-    finished_file = open('finished.txt', 'a', encoding='utf8')
-    log_file = open('log.txt', 'a', encoding='utf8')
-
-    while True:
-        if task_queue.empty():
-            print('Task queue is empty.')
-
-        try:
-            res = done_queue.get(timeout=2)
-        except queue.Empty:
-            anybody_alive = False
-            for j in range(len(processes)):
-                if processes[j].is_alive():
-                    anybody_alive = True
-                    break
-            if anybody_alive:
-                continue
+            s = signal.signal(signal.SIGINT, signal.SIG_IGN)
+            if task == 'COOKIE':
+                if status == 'OK':
+                    log.debug('processing loop. cookie - ok')
+                    settings.set_free_proxy(details['proxy_ip'], details['proxy_port'])
+                    settings.set_cookie(details['username'], details['cookie'])
+                elif status == 'ERROR':
+                    log.debug('processing loop. cookie - error: %s' % details['text'])
+                    settings.set_free_proxy(details['proxy_ip'], details['proxy_port'])
+                    # settings.set_cookie_error(details['username'])
+                else:
+                    log.warning('processing loop. cookie - unknown status:' + status)
+            elif task == 'GET_PAGE':
+                if status == 'OK':
+                    ids_status['finished_last'] += 1
+                    log.debug('processing loop. get page - OK, id: %s' % str(details['id']))
+                    settings.set_free_proxy(details['proxy_ip'], details['proxy_port'])
+                    settings.set_free_cookie(details['cookie'])
+                    id, line, description = details['id'], details['line'], details['description']
+                    if not os.path.exists(settings.descr_folder):
+                        os.mkdir(settings.descr_folder)
+                    path = settings.descr_folder + '/%03i/' % (id // 100000)
+                    if not os.path.exists(path):
+                        os.mkdir(path)
+                    filename = path + ('%08i' % id)
+                    handle_description_file = open(filename, 'w', encoding='utf8')
+                    handle_description_file.write(description)
+                    handle_description_file.close()
+                    settings.handle_table_file.write(line + '\n')
+                    settings.handle_finished_file.write(str(id) + '\n')
+                elif status == 'NO_HASH':
+                    ids_status['nohash_last'] += 1
+                    log.debug('processing loop. get page - NO HASH, id: %s' % str(details['id']))
+                    settings.set_free_proxy(details['proxy_ip'], details['proxy_port'])
+                    settings.set_free_cookie(details['cookie'])
+                    id = details['id']
+                    settings.handle_finished_file.write(str(id) + '\n')
+                elif status == 'ERROR':
+                    ids_status['error_last'] += 1
+                    log.debug('processing loop. get page - error: %s' % details['text'])
+                    if details['text'] == 'not logined':
+                        settings.set_error_cookie(details['cookie'])
+                    settings.set_free_cookie(details['cookie'])
+                    if ('request exception' in details['text']) or ('request timeout exception' in details['text']):
+                        settings.set_error_proxy(details['proxy_ip'], details['proxy_port'])
+                    settings.set_free_proxy(details['proxy_ip'], details['proxy_port'])
+                    settings.ids.append(int(details['id']))
+                else:
+                    log.warning('processing loop. get page - unknown status: %s, id: %s' % (status, details['id']))
             else:
-                print('All processes died, terminated.')
-                exit()
+                log.warning('processing loop. unknown task:' + task)
+            signal.signal(signal.SIGINT, s)
 
-        # noinspection PyUnboundLocalVariable
-        id, arg1, arg2 = res
-        if arg1 == 'ERROR':
-            if arg2 == 'no hash':
-                arg1 = 'OK'
-                finished_file.write(str(id) + '\n')
-            print(id, arg1, arg2)
-            log_file.write(str(id) + ' ' + str(arg1) + ' ' + str(arg2) + '\n')
-            continue
-
-        line = arg1
-        descr = arg2
-
-        print(id, 'OK')
-        finished_file.write(str(id) + '\n')
-        log_file.write(str(id) + ' ' + 'ok' + '\n')
-
-        handle_table_file.write(line + '\n')
-
-        if not os.path.exists(descr_folder):
-            os.mkdir(descr_folder)
-        path = descr_folder + '/%03i/' % (id // 100000)
-        if not os.path.exists(path):
-            os.mkdir(path)
-
-        filename = path + ('%08i' % id)
-        descr_file = open(filename, 'w', encoding='utf8')
-        descr_file.write(descr)
-        descr_file.close()
-
-    handle_table_file.close()
-    log_file.close()
-    finished_file.close()
+    except KeyboardInterrupt:
+        log.info('Ctrl+^C, exitting...')
+        exit()
