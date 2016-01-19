@@ -94,7 +94,7 @@ class MainWindow(QMainWindow):
         self.webview.setZoomFactor(0.85)
         self.search.setText('Искать')
         self.input2.setMaximumWidth(300)
-        self.setWindowTitle('RuTracker database   |   by Str@y')
+        self.setWindowTitle('RuTracker database   |   by Strayge')
         self.input.setPlaceholderText('Строка для поиска в названии')
         self.input2.setPlaceholderText('Строка для поиска в категории')
 
