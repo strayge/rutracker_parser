@@ -53,6 +53,7 @@ For work needs:
 * **descr** with dirs 000, 001, 002, ... which contains:
   * 00000.tar.bz2, 00001.tar.bz2, ..., 00099.tar.bz2 for 000
   * 00100.tar.bz2, 00101.tar.bz2, ..., 00199.tar.bz2 for 001
+  * ...
 
 Screenshot
 ![Screenshot](viewer_screenshot.png?raw=true)
@@ -61,6 +62,8 @@ In search:
 * **word** for include word
 * **-word** for exclude word
 * **limit:5** for set limit of search results (by default - 20)
+
+Double click on hash to copy **magnet-link** into clipboard.
 
 Search is running by seeds count. (if want change - resort table_sorted.txt in table_sorted.tar.bz2 as you want).
 
