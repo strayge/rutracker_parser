@@ -21,10 +21,10 @@ class Settings:
         ap.add_argument('--port', '-p')
         ap.add_argument('--user', '-u')
         ap.add_argument('--password', '-pw')
-        ap.add_argument('--html')
+        # ap.add_argument('--html')
         ap.add_argument('--folder', '-f')
-        ap.add_argument('--cookie')
-        ap.add_argument('--cookies_list')
+        # ap.add_argument('--cookie')
+        # ap.add_argument('--cookies_list')
         ap.add_argument('--random', action="store_true")
         ap.add_argument('--threads', '-tr', type=int)
         ap.add_argument('--proxy_file', '-pf', '-pr')
@@ -34,15 +34,15 @@ class Settings:
         ap.add_argument('--qsize', '-q', type=int)
         self.options = ap.parse_args()
 
-        self.login = self.options.user if self.options.user else 'LOGIN'
-        self.password = self.options.password if self.options.password else 'PASSWOED'
+        self.login = self.options.user if self.options.user else ''
+        self.password = self.options.password if self.options.password else ''
         self.ids_file = self.options.ids_file if self.options.ids_file else ''
         self.ids = self.options.ids if self.options.ids else ''
         self.ids_ignore = self.options.ids_ignore if self.options.ids_ignore else ''
         self.restore = True if self.options.restore else False
         self.random = True if self.options.random else False
         self.print = True if self.options.print else False
-        self.html_folder = self.options.html if self.options.html else 'html'
+        # self.html_folder = self.options.html if self.options.html else 'html'
         self.threads_num = int(self.options.threads) if self.options.threads else 1
         self.descr_folder = self.options.folder if self.options.folder else 'descr'
         self.proxy_file = self.options.proxy_file if self.options.proxy_file else 'proxy.txt'
@@ -108,16 +108,28 @@ class Settings:
             self.proxy_list = list({'ip': '127.0.0.1', 'port': int(self.proxy_port)})
             self.log.info("loaded single proxy - 127.0.0.1:%s" % str(self.proxy_port))
 
-        if os.path.exists(self.login_file):
-            readed_list = list(map(str.split, open(self.login_file)))  # read file, split user pass
-            for user,password in readed_list:
+        if self.login and self.password:
+            self.login_list.append({'username': self.login, 'password': self.password, 'in_use': 0, 'fails': 0})
+            self.log.info("loaded 1 login")
+        elif os.path.exists(self.login_file):
+            for line in open(self.login_file):
+                if line.strip() == '':
+                    continue
+                parts = line.strip('\r\n').split()
+                if len(parts) != 2:
+                    parts =  line.strip('\r\n').split("\t")
+                    if len(parts) != 2:
+                        self.log.error("Can't split line into user and pass: '%s'." % line)
+                        raise "Can't split line into user and pass"
+                user, password = parts
                 self.login_list.append({'username': user, 'password': password, 'in_use': 0, 'fails': 0})
             random.shuffle(self.login_list)
             self.log.info("loaded %i logins from file" % len(self.login_list))
-        else: # len(self.login_list) == 0:
-            self.login_list = list({'user': self.login, 'password': self.password})
-            self.log.info("loaded 1 login")
-
+        print(self.login_list)
+        if not len(self.login_list):
+            self.log.error("Can't load user/pass.")
+            raise "Can't load user/pass."
+        print(self.login_list)
         if self.ids_file:
             self.log.debug("loading ids from file")
             self.ids = set(map(int, open(self.ids_file)))
