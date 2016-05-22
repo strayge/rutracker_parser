@@ -38,6 +38,21 @@ Example of use
 python3 ./loader.py --ids 0000001 5160000 --threads 200 --qsize 25 --resume
 ```
 
+Args
+----
+
+--ids 0000001 0001000 - download specified range of ids  
+--ids_file file_with_ids.txt - download ids from specified file  
+--ids_ignore old_finish.txt - exclude ids not existed in specified file (as example, skip doesn't wxisted ids from previous crawling)  
+--random - download in random order  
+--threads 100 - count of threads for downloading  
+--proxy_file proxy.txt - specified file with socks5 proxies (default - proxy.txt)  
+--login_file login.txt - specified file with logins and passwords (default - login.txt)  
+--resume - resuming previous crawling (skipping downloaded ids from finished.txt)  
+--print - with 'resume' closes program after showing finished/left counters  
+--folder descriptions - specifying dir for descriptions of (default - descr)  
+--qsize 20 - max queue for downloading (default - 30)  
+
 Converting
 ------------
 pack.sh - pack descriptions for viewer
