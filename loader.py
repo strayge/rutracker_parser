@@ -113,19 +113,20 @@ if __name__ == '__main__':
                 ids_status['nohash_last'] = 0
             # adding new tasks
             if (task_queue.qsize() < settings.qsize) and (ids_pointer < len(settings.ids)):
+                exit_counter = 0
                 id_max = min(ids_pointer + settings.qsize, len(settings.ids))
                 for i in range(ids_pointer, id_max):
                     proxy = settings.get_free_proxy()
                     if not proxy:
                         if time.time() > nexttime:
-                            log.warning('free proxy not available')
+                            log.info('free proxy not available')
                             log.debug('proxies: %s' % str(settings.proxy_list))
                             nexttime = time.time() + 60
                         break
                     cookie = settings.get_free_cookie()
                     if not cookie:
                         if time.time() > nexttime:
-                            log.warning('free cookie not available')
+                            log.info('free cookie not available')
                             log.debug('cookies: %s' % str(settings.login_list))
                             nexttime = time.time() + 60
                         break

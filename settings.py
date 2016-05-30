@@ -49,7 +49,7 @@ class Settings:
         self.proxy_file = self.options.proxy_file if self.options.proxy_file else 'proxy.txt'
         self.login_file = self.options.login_file if self.options.login_file else 'login.txt'
         self.proxy_port = int(self.options.port) if self.options.port else 9150
-        self.qsize = int(self.options.qsize) if self.options.qsize else 30
+        self.qsize = int(self.options.qsize) if self.options.qsize else min((self.threads_num + 2), 30)
         self.table_file = "table.txt"
         self.ids_finished = 'finished.txt'
 
@@ -126,17 +126,15 @@ class Settings:
                 self.login_list.append({'username': user, 'password': password, 'in_use': 0, 'fails': 0})
             random.shuffle(self.login_list)
             self.log.info("loaded %i logins from file" % len(self.login_list))
-        print(self.login_list)
         if not len(self.login_list):
             self.log.error("Can't load user/pass.")
             raise "Can't load user/pass."
-        print(self.login_list)
         if self.ids_file:
             self.log.debug("loading ids from file")
             self.ids = set(map(int, open(self.ids_file)))
         else:
             self.ids = set(range(self.options.ids[0], self.options.ids[1]))
-
+        
         if self.ids_ignore and os.path.isfile(self.ids_ignore):
             self.log.debug("ignore part of ids from file")
             max_id = 0
