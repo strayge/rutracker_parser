@@ -38,12 +38,11 @@ Example of use
 python3 ./loader.py --ids 0000001 5160000 --threads 200 --qsize 25 --resume
 ```
 
-Args
-----
+### Args
 
 --ids 0000001 0001000 - download specified range of ids  
 --ids_file file_with_ids.txt - download ids from specified file  
---ids_ignore old_finish.txt - exclude ids not existed in specified file (as example, skip doesn't wxisted ids from previous crawling)  
+--ids_ignore old_finish.txt - exclude ids not existed in specified file (as example, skip doesn't existed ids from previous crawling)  
 --random - download in random order  
 --threads 100 - count of threads for downloading  
 --proxy_file proxy.txt - specified file with socks5 proxies (default - proxy.txt)  
