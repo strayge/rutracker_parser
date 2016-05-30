@@ -42,6 +42,7 @@ class Settings:
         self.restore = True if self.options.restore else False
         self.random = True if self.options.random else False
         self.print = True if self.options.print else False
+        self.noproxy = True if self.options.noproxy else False
         # self.html_folder = self.options.html if self.options.html else 'html'
         self.threads_num = int(self.options.threads) if self.options.threads else 1
         self.descr_folder = self.options.folder if self.options.folder else 'descr'
@@ -235,6 +236,8 @@ class Settings:
             self.log.warning('cookie removed from pool (too many fails)')
 
     def get_free_proxy(self):
+        if self.noproxy:
+            return {'ip':'', 'port': -1}
         not_using_proxies = [proxy for proxy in self.proxy_list if proxy['in_use'] < self.threads_per_proxy]
         random.shuffle(not_using_proxies)
         if len(not_using_proxies) == 0:
@@ -248,10 +251,14 @@ class Settings:
         return selected_proxy
 
     def set_free_proxy(self, proxy_ip, proxy_port):
+        if proxy_port == -1:
+            return
         i = [i for i,proxy in enumerate(self.proxy_list) if (proxy['ip'] == proxy_ip) and (proxy['port'] == proxy_port)][0]
         self.proxy_list[i]['in_use'] -= 1
 
     def set_error_proxy(self, proxy_ip, proxy_port):
+        if proxy_port == -1:
+            return
         self.log.debug('set_error_proxy, %s: %s' % (proxy_ip, proxy_port))
         i = [i for i,proxy in enumerate(self.proxy_list) if (proxy['ip'] == proxy_ip) and (proxy['port'] == proxy_port)][0]
         self.proxy_list[i]['fails'] += 1

@@ -14,8 +14,9 @@ def get_cookie(params):
     for key in params:
         if key != 'logger': # not serializable object
             res[key] = params[key]
-    socks.setdefaultproxy(socks.PROXY_TYPE_SOCKS5, params['proxy_ip'], params['proxy_port'])
-    socket.socket = socks.socksocket
+    if params['proxy_port'] != -1:
+        socks.setdefaultproxy(socks.PROXY_TYPE_SOCKS5, params['proxy_ip'], params['proxy_port'])
+        socket.socket = socks.socksocket
     try:
         post_params = {
             'login_username': params['username'],
@@ -49,8 +50,9 @@ def get_page(params):
         if key != 'logger': # not serializable object
             res[key] = params[key]
     # log.debug('get_page start')
-    socks.setdefaultproxy(socks.PROXY_TYPE_SOCKS5, params['proxy_ip'], params['proxy_port'])
-    socket.socket = socks.socksocket
+    if params['proxy_port'] != -1:
+        socks.setdefaultproxy(socks.PROXY_TYPE_SOCKS5, params['proxy_ip'], params['proxy_port'])
+        socket.socket = socks.socksocket
 
     def between(text, p_from, p_to):
         return text.split(p_from)[1].split(p_to)[0]
