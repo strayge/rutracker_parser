@@ -19,8 +19,8 @@ def get_cookie(params):
         socket.socket = socks.socksocket
     try:
         post_params = {
-            'login_username': params['username'],
-            'login_password': params['password'],
+            'login_username': params['username'].encode('cp1251'),
+            'login_password': params['password'].encode('cp1251'),
             'login': b'\xe2\xf5\xee\xe4'  # '%E2%F5%EE%E4'
         }
         r = requests.post('https://rutracker.org/forum/login.php',data=post_params,allow_redirects=False,timeout=20)
