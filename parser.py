@@ -23,7 +23,6 @@ def get_cookie(params):
             'login_password': params['password'],
             'login': b'\xe2\xf5\xee\xe4'  # '%E2%F5%EE%E4'
         }
-        print(post_params, params['proxy_ip'], params['proxy_port'])
         r = requests.post('https://rutracker.org/forum/login.php',data=post_params,allow_redirects=False,timeout=20)
         if 'bb_data' in r.cookies.keys():
             cookie = 'bb_data=' + r.cookies['bb_data'] + '; tr_simple=1; spylog_test=1'
