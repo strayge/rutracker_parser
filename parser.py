@@ -23,7 +23,8 @@ def get_cookie(params):
             'login_password': params['password'],
             'login': b'\xe2\xf5\xee\xe4'  # '%E2%F5%EE%E4'
         }
-        r = requests.post('http://login.rutracker.org/forum/login.php',data=post_params,allow_redirects=False,timeout=20)
+        print(post_params, params['proxy_ip'], params['proxy_port'])
+        r = requests.post('https://rutracker.org/forum/login.php',data=post_params,allow_redirects=False,timeout=20)
         if 'bb_data' in r.cookies.keys():
             cookie = 'bb_data=' + r.cookies['bb_data'] + '; tr_simple=1; spylog_test=1'
             res['cookie'] = cookie
@@ -59,14 +60,14 @@ def get_page(params):
 
     try:
         path = '/forum/viewtopic.php?t=%(id)i' % {'id': params['id']}
-        url = 'http://rutracker.org%(path)s' % {'path': path}
+        url = 'https://rutracker.org%(path)s' % {'path': path}
         params['headers']['Cookie'] = params['cookie']
         req = requests.get(url, headers=params['headers'], timeout=20)
         html = req.text
         if not (('<html>' in html) or ('<HTML>' in html)):
             res['text'] = 'not html in response'
             return 'ERROR', res
-        if ('profile.php?mode=register">' in html) or ('action="http://login.rutracker.org/forum/login.php">' in html):
+        if ('profile.php?mode=register">' in html) or ('action="https://rutracker.org/forum/login.php">' in html):
             res['text'] = 'not logined'
             return 'ERROR', res
         if len(html) < 1000:
