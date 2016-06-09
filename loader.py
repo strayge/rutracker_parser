@@ -166,7 +166,7 @@ if __name__ == '__main__':
                     settings.set_free_proxy(details['proxy_ip'], details['proxy_port'])
                     settings.set_cookie(details['username'], details['cookie'])
                 elif status == 'ERROR':
-                    log.debug('processing loop. cookie - error: %s' % details['text'])
+                    log.error('processing loop. cookie - error: %s' % details['text'])
                     settings.set_free_proxy(details['proxy_ip'], details['proxy_port'])
                     # settings.set_cookie_error(details['username'])
                 else:
@@ -198,7 +198,7 @@ if __name__ == '__main__':
                     settings.handle_finished_file.write(str(id) + '\n')
                 elif status == 'ERROR':
                     ids_status['error_last'] += 1
-                    log.debug('processing loop. get page - error: %s' % details['text'])
+                    log.error('processing loop. get page - error: %s' % details['text'])
                     if details['text'] == 'not logined':
                         settings.set_error_cookie(details['cookie'])
                     settings.set_free_cookie(details['cookie'])

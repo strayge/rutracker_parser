@@ -30,8 +30,14 @@ def get_cookie(params):
             log.debug('cookie: %s' % cookie)
             return 'OK', res
         else:
-            log.debug('no cookies returned')
-            res['text'] = 'no cookies returned'
+            if 'неверный пароль'.encode('cp1251') in r.content:
+                error_text = 'wrong username/password'
+            elif 'введите код подтверждения'.encode('cp1251') in r.content:
+                error_text = 'site want captcha'
+            else:
+                error_text = 'no cookies returned'
+            log.debug(error_text)
+            res['text'] = error_text
             return 'ERROR', res
     except requests.exceptions.RequestException as e:
         log.debug('request exception')
