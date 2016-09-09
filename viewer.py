@@ -181,6 +181,8 @@ class MainWindow(QMainWindow):
         self.timer.start()
 
     def do_work(self, index=None):
+        index = self.tree.model().mapToSource( index )
+        
         name = self.model.item(index.row(), tree_columns.index('name')).text()
         hash = self.model.item(index.row(), tree_columns.index('hash')).text()
         args = (
