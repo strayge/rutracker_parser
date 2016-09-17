@@ -28,8 +28,12 @@ class NumberSortModel(QSortFilterProxyModel):
             lvalue = int(left.data())
             rvalue = int(right.data())
         elif left.column() == tree_columns.index('date'):
-            lvalue = datetime.strptime(left.data(), '%d-%b-%y %H:%M')
-            rvalue = datetime.strptime(right.data(), '%d-%b-%y %H:%M')
+            try:
+                lvalue = datetime.strptime(left.data(), '%d-%b-%y %H:%M')
+                rvalue = datetime.strptime(right.data(), '%d-%b-%y %H:%M')
+            except ValueError:
+                lvalue = datetime.strptime(left.data(), '%d-%m-%y %H:%M')
+                rvalue = datetime.strptime(right.data(), '%d-%m-%y %H:%M')
         elif left.column() == tree_columns.index('size'):
             lvalue = left.data()
             rvalue = right.data()
