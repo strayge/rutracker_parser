@@ -100,6 +100,8 @@ class Settings:
         elif os.path.exists(self.proxy_file):
             proxies = list(open(self.proxy_file))
             for line in proxies:
+                if not line.strip():
+                    continue
                 ip, port = line.split()
                 self.proxy_list.append({'ip': ip, 'port': int(port), 'in_use': 0, 'fails': 0})
             random.shuffle(self.proxy_list)
@@ -113,7 +115,7 @@ class Settings:
             self.log.info("loaded 1 login")
         elif os.path.exists(self.login_file):
             for line in open(self.login_file):
-                if line.strip() == '':
+                if not line.strip():
                     continue
                 parts = line.strip('\r\n').split()
                 if len(parts) != 2:

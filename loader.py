@@ -2,7 +2,7 @@
 
 import os
 from settings import Settings
-import parser
+import parse
 import random
 from multiprocessing import Queue, freeze_support, Process, current_process
 import queue # for exceptions
@@ -20,11 +20,11 @@ def worker(input, output):
             # log.debug('thread iteration')
             new_input[1]['logger'] = log
             if new_input[0] == 'COOKIE':
-                status, details = parser.get_cookie(new_input[1])
+                status, details = parse.get_cookie(new_input[1])
                 output.put((new_input[0], status, details))
             elif new_input[0] == 'GET_PAGE':
                 time.sleep(3)
-                status, details = parser.get_page(new_input[1])
+                status, details = parse.get_page(new_input[1])
                 output.put((new_input[0], status, details))
             else:
                 log.warning('unknown task: %s' % new_input[0])
