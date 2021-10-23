@@ -4,7 +4,6 @@ from html.parser import unescape
 import socks
 import requests
 import socket
-import logging
 
 
 def get_cookie(params):
@@ -23,8 +22,8 @@ def get_cookie(params):
             'login': b'\xe2\xf5\xee\xe4'  # '%E2%F5%EE%E4'
         }
         r = requests.post('https://rutracker.org/forum/login.php',data=post_params,allow_redirects=False,timeout=20)
-        if 'bb_data' in r.cookies.keys():
-            cookie = 'bb_data=' + r.cookies['bb_data'] + '; tr_simple=1; spylog_test=1'
+        if 'bb_session' in r.cookies.keys():
+            cookie = 'bb_session=' + r.cookies['bb_session'] + '; bb_ssl=1'
             res['cookie'] = cookie
             log.debug('cookie: %s' % cookie)
             return 'OK', res
@@ -39,7 +38,7 @@ def get_cookie(params):
             res['text'] = error_text
             return 'ERROR', res
     except requests.exceptions.RequestException as e:
-        log.debug('request exception')
+        log.debug('request exception', repr(e))
         res['text'] = 'request exception'
         return 'ERROR', res
     except socket.timeout as e:
@@ -68,7 +67,7 @@ def get_page(params):
         params['headers']['Cookie'] = params['cookie']
         req = requests.get(url, headers=params['headers'], timeout=20)
         html = req.text
-        if not (('<html>' in html) or ('<HTML>' in html)):
+        if not (('<html' in html) or ('HTML' in html)):
             res['text'] = 'not html in response'
             return 'ERROR', res
         if ('profile.php?mode=register">' in html) or ('action="https://rutracker.org/forum/login.php">' in html):
@@ -79,7 +78,7 @@ def get_page(params):
             return 'ERROR', res
         # f = open('html.txt', "w")
         # f.write(html)
-        if not ('tor-hash">' in html):
+        if not ('<a href="magnet:?xt=urn:btih:' in html):
             return 'NO_HASH', res
         else:
             line = list()
@@ -114,7 +113,7 @@ def get_page(params):
                 # res['text'] = error_text
                 # return 'ERROR', res
             line.append(peers)
-            hash = between(html, 'tor-hash">', "</span>")
+            hash = between(html, '<a href="magnet:?xt=urn:btih:', '&')
             line.append(hash)
             if 'torrent скачан:&nbsp; <b>' in html:
                 downloads = between(html, 'torrent скачан:&nbsp; <b>', " раз").strip()
@@ -129,6 +128,7 @@ def get_page(params):
                 log.warning(error_text)
                 res['text'] = error_text
                 return 'ERROR', res
+            downloads = downloads.replace(',', '')
             if not downloads.isdigit():
                 error_text = 'parser, downloads, bad template, id: %i' % params['id']
                 log.warning(error_text)
@@ -136,10 +136,9 @@ def get_page(params):
                 return 'ERROR', res
 
             line.append(downloads)
-            if 'Зарегистрирован &nbsp;[ ' in html:
-                date = between(html, 'Зарегистрирован &nbsp;[ ', ' ]')
-            elif 'зарегистрирован">[ ' in html:
-                date = between(html, 'зарегистрирован">[ ', ' ]<')
+            if '>Зарегистрирован:</td>' in html:
+                date = between(html, '>Зарегистрирован:</td>', '</td>')
+                date = between(date, '<li>', '</li>')
             else:
                 error_text = 'parser, date, template not found, id: %i' % params['id']
                 log.warning(error_text)
@@ -163,11 +162,13 @@ def get_page(params):
             line.append(category_string)
 
             line = '\t'.join(line)
-            descr = between(html, '<div class="post_body" id="', '<div class="clear"></div>')
+            descr = between(html, '<div class="post_body" id="', '<div class="clear"')
             descr = descr.split('>', 1)[1]
             descr = descr.strip()
-            if descr.endswith('</div>'):
-                descr = descr[:-6]
+            if descr.endswith('</div><!--/post_body-->'):
+                descr = descr[:-23].strip()
+            elif descr.endswith('</div>'):
+                descr = descr[:-6].strip()
             descr = unescape(descr)
             res['line'] = line
             res['description'] = descr
