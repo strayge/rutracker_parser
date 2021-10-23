@@ -1,5 +1,4 @@
-#!/usr/bin/python3
-# -*- coding: utf8 -*-
+#!/usr/bin/env python3
 
 import sys
 import urllib.parse
@@ -10,7 +9,7 @@ from datetime import datetime
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
-from PyQt5 import QtWebKitWidgets
+from PyQt5.QtWebEngineWidgets import QWebEngineView
 
 tree_columns = ('id', 'name', 'size', 'seeds', 'peers', 'hash', 'downloads', 'date', 'category')
 tree_columns_visible = ('ID', 'Название', 'Размер', 'Сиды', 'Пиры', 'Hash', 'Скачиваний', 'Дата', 'Раздел')
@@ -75,7 +74,7 @@ class MainWindow(QMainWindow):
         self.input2 = QLineEdit()
         self.search = QPushButton()
         self.tree = QTableView()
-        self.webview = QtWebKitWidgets.QWebView()
+        self.webview = QWebEngineView()
         separator = QSplitter()
         self.statusbar = QStatusBar()
         self.setStatusBar(self.statusbar)
@@ -98,7 +97,7 @@ class MainWindow(QMainWindow):
         self.webview.setZoomFactor(0.85)
         self.search.setText('Искать')
         self.input2.setMaximumWidth(300)
-        self.setWindowTitle('RuTracker database   |   by Strayge')
+        self.setWindowTitle('RuTracker database   |   by strayge')
         self.input.setPlaceholderText('Строка для поиска в названии')
         self.input2.setPlaceholderText('Строка для поиска в категории')
 
