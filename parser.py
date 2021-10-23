@@ -1,5 +1,4 @@
-#!/usr/bin/python
-# -*- coding: cp1251 -*-
+#!/usr/bin/env python3
 
 from html.parser import unescape
 import socks
@@ -30,9 +29,9 @@ def get_cookie(params):
             log.debug('cookie: %s' % cookie)
             return 'OK', res
         else:
-            if 'неверный пароль'.encode('cp1251') in r.content:
+            if 'РЅРµРІРµСЂРЅС‹Р№ РїР°СЂРѕР»СЊ'.encode('cp1251') in r.content:
                 error_text = 'wrong username/password'
-            elif 'введите код подтверждения'.encode('cp1251') in r.content:
+            elif 'РІРІРµРґРёС‚Рµ РєРѕРґ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ'.encode('cp1251') in r.content:
                 error_text = 'site want captcha'
             else:
                 error_text = 'no cookies returned'
@@ -96,8 +95,8 @@ def get_page(params):
                 return 'ERROR', res
             line.append(size)
             # seeds = '0'
-            if '<span class="seed">Сиды:&nbsp; <b>' in html:
-                seeds = between(html, 'seed">Сиды:&nbsp; <b>', '</b>')
+            if '<span class="seed">РЎРёРґС‹:&nbsp; <b>' in html:
+                seeds = between(html, 'seed">РЎРёРґС‹:&nbsp; <b>', '</b>')
             else:
                 seeds = '0'
                 # error_text = 'parser, seeds, template not found, id: %i' % params['id']
@@ -106,8 +105,8 @@ def get_page(params):
                 # return 'ERROR', res
             line.append(seeds)
             # peers = '0'
-            if 'leech">Личи:&nbsp; <b>' in html:
-                peers = between(html, 'leech">Личи:&nbsp; <b>', '</b>')
+            if 'leech">Р›РёС‡Рё:&nbsp; <b>' in html:
+                peers = between(html, 'leech">Р›РёС‡Рё:&nbsp; <b>', '</b>')
             else:
                 peers = '0'
                 # error_text = 'parser, peers, template not found, id: %i' % params['id']
@@ -117,14 +116,14 @@ def get_page(params):
             line.append(peers)
             hash = between(html, 'tor-hash">', "</span>")
             line.append(hash)
-            if 'torrent скачан:&nbsp; <b>' in html:
-                downloads = between(html, 'torrent скачан:&nbsp; <b>', " раз").strip()
-            elif '<td>.torrent скачан:</td>\n\t\t<td>' in html:
-                downloads = between(html, '<td>.torrent скачан:</td>\n\t\t<td>', " раз").strip()
-            elif ('Скачан: ' in html) and ('раза\t\t</td>' in html):
-                downloads = between(html, 'Скачан: ', 'раза\t\t</td>').strip()
-            elif ('Скачан: ' in html) and ('раз\t\t</td>' in html):
-                downloads = between(html, 'Скачан: ', 'раз\t\t</td>').strip()
+            if 'torrent СЃРєР°С‡Р°РЅ:&nbsp; <b>' in html:
+                downloads = between(html, 'torrent СЃРєР°С‡Р°РЅ:&nbsp; <b>', " СЂР°Р·").strip()
+            elif '<td>.torrent СЃРєР°С‡Р°РЅ:</td>\n\t\t<td>' in html:
+                downloads = between(html, '<td>.torrent СЃРєР°С‡Р°РЅ:</td>\n\t\t<td>', " СЂР°Р·").strip()
+            elif ('РЎРєР°С‡Р°РЅ: ' in html) and ('СЂР°Р·Р°\t\t</td>' in html):
+                downloads = between(html, 'РЎРєР°С‡Р°РЅ: ', 'СЂР°Р·Р°\t\t</td>').strip()
+            elif ('РЎРєР°С‡Р°РЅ: ' in html) and ('СЂР°Р·\t\t</td>' in html):
+                downloads = between(html, 'РЎРєР°С‡Р°РЅ: ', 'СЂР°Р·\t\t</td>').strip()
             else:
                 error_text = 'parser, downloads, template not found, id: %i' % params['id']
                 log.warning(error_text)
@@ -137,17 +136,17 @@ def get_page(params):
                 return 'ERROR', res
 
             line.append(downloads)
-            if 'Зарегистрирован &nbsp;[ ' in html:
-                date = between(html, 'Зарегистрирован &nbsp;[ ', ' ]')
-            elif 'зарегистрирован">[ ' in html:
-                date = between(html, 'зарегистрирован">[ ', ' ]<')
+            if 'Р—Р°СЂРµРіРёСЃС‚СЂРёСЂРѕРІР°РЅ &nbsp;[ ' in html:
+                date = between(html, 'Р—Р°СЂРµРіРёСЃС‚СЂРёСЂРѕРІР°РЅ &nbsp;[ ', ' ]')
+            elif 'Р·Р°СЂРµРіРёСЃС‚СЂРёСЂРѕРІР°РЅ">[ ' in html:
+                date = between(html, 'Р·Р°СЂРµРіРёСЃС‚СЂРёСЂРѕРІР°РЅ">[ ', ' ]<')
             else:
                 error_text = 'parser, date, template not found, id: %i' % params['id']
                 log.warning(error_text)
                 res['text'] = error_text
                 return 'ERROR', res
 
-            months = ("Янв", "Фев", "Мар", "Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек")
+            months = ("РЇРЅРІ", "Р¤РµРІ", "РњР°СЂ", "РђРїСЂ", "РњР°Р№", "РСЋРЅ", "РСЋР»", "РђРІРі", "РЎРµРЅ", "РћРєС‚", "РќРѕСЏ", "Р”РµРє")
             for i in range(len(months)):
                 date = date.replace(months[i], "%02d" % (i+1))
             line.append(date)
@@ -156,7 +155,7 @@ def get_page(params):
             category_temp = category_htmlpart.replace('">', "</a>").split('</a>')
             category_list = list((i for i in category_temp if
                                   ('<em>' not in i) and ('\t' not in i) and ('style="' not in i) and (
-                                  'Список форумов ' not in i)))
+                                  'РЎРїРёСЃРѕРє С„РѕСЂСѓРјРѕРІ ' not in i)))
             category_string = ''
             for one_category in category_list:
                 category_string += one_category + ' | '

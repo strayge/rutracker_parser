@@ -1,5 +1,4 @@
-#!/usr/bin/python3
-# -*- coding: utf8 -*-
+#!/usr/bin/env python3
 
 items = []
 print('reading...')

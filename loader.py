@@ -1,5 +1,4 @@
-#!/usr/bin/python
-# -*- coding: cp1251 -*-
+#!/usr/bin/env python3
 
 import os
 from settings import Settings
